@@ -1,0 +1,15 @@
+version: 2
+
+# Weekly, one grouped pull request per ecosystem. Security updates open as soon
+# as they are published, whatever the schedule says.
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly }
+    groups:
+      npm: { patterns: ["*"] }
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }

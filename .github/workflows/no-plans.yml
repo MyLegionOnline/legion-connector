@@ -1,0 +1,17 @@
+name: No plans
+
+# Planning documents never belong in this repository.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  no-plans:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh .github/scripts/check_no_plans.sh

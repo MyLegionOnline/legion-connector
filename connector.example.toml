@@ -1,0 +1,48 @@
+# Legion connector — local policy.
+#
+# The Hub can READ this file's contents via the `hello.capabilities` frame;
+# it can never weaken it. Copy this to ~/.legion-connector/connector.toml
+# (or set LEGION_CONNECTOR_CONFIG) and edit before pairing.
+
+# WS endpoint of your Hub. Pairing (`legion-connector pair <code>`) derives
+# the REST pairing/token endpoints from this same host.
+hub_url = "wss://hub.example.com/api/v1/connector/ws"
+
+# Which local CLI agent this connector drives. Only "opencode" is supported.
+agent_cli = "opencode"
+
+# Directories the local agent may be started in (absolute paths). A task runs
+# in the first entry unless the Hub suggests a directory; a suggestion outside
+# every entry is refused, as is one that leads out through `..` or a symlink.
+# Empty = unrestricted (not recommended outside a throwaway VM).
+# This limits where the agent STARTS, not what it does afterwards: OpenCode can
+# still read or run things elsewhere, so keep its permissions (opencode.json)
+# strict too.
+work_dirs = ["/srv/apps/landing"]
+
+# Command prefixes (also behind `sudo`) that always require a human
+# confirmation in the Hub chat. The connector hands them to OpenCode as `ask`
+# rules after your opencode.json, so they win over an `allow` there. Do not
+# list commands you want forbidden outright: forbid them with `deny` in
+# opencode.json (see opencode.example.json) instead, since a rule listed here
+# would turn that `deny` into a confirmation. If OpenCode does not report the
+# rules as active, the task is refused rather than run unconfirmed.
+confirm_ops = ["rm", "systemctl restart", "systemctl stop"]
+
+# Modes this installation accepts. `operator` (the agent changes this machine's
+# environment and reports back) is the only mode; a dispatch for any other
+# mode is refused.
+modes = ["operator"]
+
+[opencode]
+# Defaults to spawning `opencode` on PATH; override if it lives elsewhere.
+# command = "opencode"
+# port = 4096
+# password = ""
+# Which OpenCode API to drive: "auto" reads `opencode --version` (1.18+ → v1, 2.x → v2).
+# Force one only for a custom build whose version says nothing.
+# api = "auto"
+# OpenCode 2.x only: a database file of the connector's own, so it does not
+# share the one in ~/.local/share/opencode with your own OpenCode.
+# db = "/var/lib/legion-connector/opencode.db"
+

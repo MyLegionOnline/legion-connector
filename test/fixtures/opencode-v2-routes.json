@@ -1,0 +1,83 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "opencode HttpApi",
+    "version": "0.0.1",
+    "description": "Experimental HttpApi surface for selected instance routes."
+  },
+  "note": "Routes the connector uses, cut from https://opencode.ai/v2/openapi.json on 2026-10-13. Refresh when the driver starts calling more.",
+  "paths": {
+    "/api/session": {
+      "post": {
+        "summary": "Create session",
+        "operationId": "session.create"
+      }
+    },
+    "/api/session/active": {
+      "get": {
+        "summary": "List active sessions",
+        "operationId": "session.active"
+      }
+    },
+    "/api/session/{sessionID}/prompt": {
+      "post": {
+        "summary": "Send message",
+        "operationId": "session.prompt"
+      }
+    },
+    "/api/session/{sessionID}/message": {
+      "get": {
+        "summary": "Get session messages",
+        "operationId": "session.message.list"
+      }
+    },
+    "/api/session/{sessionID}/interrupt": {
+      "post": {
+        "summary": "Interrupt session execution",
+        "operationId": "session.interrupt"
+      }
+    },
+    "/api/session/{sessionID}/permission": {
+      "get": {
+        "summary": "List session permission requests",
+        "operationId": "session.permission.list"
+      }
+    },
+    "/api/session/{sessionID}/permission/{requestID}/reply": {
+      "post": {
+        "summary": "Reply to pending permission request",
+        "operationId": "session.permission.reply"
+      }
+    },
+    "/api/session/{sessionID}/form": {
+      "get": {
+        "summary": "List session forms",
+        "operationId": "session.form.list"
+      }
+    },
+    "/api/session/{sessionID}/form/{formID}/reply": {
+      "post": {
+        "summary": "Reply to form",
+        "operationId": "session.form.reply"
+      }
+    },
+    "/api/session/{sessionID}/form/{formID}": {
+      "delete": {
+        "summary": "Cancel form",
+        "operationId": "session.form.cancel"
+      }
+    },
+    "/api/event": {
+      "get": {
+        "summary": "Subscribe to events",
+        "operationId": "event.subscribe"
+      }
+    },
+    "/api/config": {
+      "get": {
+        "summary": "Get configuration",
+        "operationId": "config.get"
+      }
+    }
+  }
+}
