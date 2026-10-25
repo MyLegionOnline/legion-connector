@@ -1,0 +1,16 @@
+{
+  "_comment": "Copy to <work_dir>/opencode.json. OpenCode reads this from the project directory the connector spawns `opencode serve` in (ctx.cwd_hint / the work_dirs entry in connector.toml) — it is project-scoped config, not connector policy. Every \"ask\" surfaces as a confirmation card in the Hub chat. Forbid commands outright with \"deny\" here and do not also list them in connector.toml confirm_ops, which would turn the deny into an ask.",
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "rm *": "ask",
+      "systemctl restart *": "ask",
+      "systemctl stop *": "ask",
+      "reboot*": "deny",
+      "shutdown*": "deny"
+    },
+    "edit": "allow"
+  },
+  "instructions": ["AGENTS.md"]
+}

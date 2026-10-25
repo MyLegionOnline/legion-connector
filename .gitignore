@@ -1,0 +1,24 @@
+# .gitignore for MyLegionOnline/legion-connector (copied by oss/export_connector.sh).
+
+node_modules/
+dist/
+
+# Local policy and credentials of an installed connector
+credentials.json
+connector.toml
+.legion-connector/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+*.log
+*.db
+
+# Plans never go in this repository
+*_plan.md
+*_plan.*.md
+*PLAN*.md
+plan/
+plans/

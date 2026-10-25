@@ -1,0 +1,37 @@
+{
+  "name": "@legion-hub/connector",
+  "version": "0.1.0",
+  "description": "Legion connector — runs your local OpenCode agent as a remote executor for a Legion Hub Room session.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MyLegionOnline/legion-connector.git"
+  },
+  "private": true,
+  "type": "module",
+  "bin": {
+    "legion-connector": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "pair": "node dist/index.js pair",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "@opencode-ai/sdk": "1.18.30"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18.17"
+  }
+}
