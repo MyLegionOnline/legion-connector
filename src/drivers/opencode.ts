@@ -244,6 +244,16 @@ export class OpenCodeDriver implements AgentDriver {
         (event) => {
           if (event.kind === "driver") {
             sink(event.event);
+          } else if (event.kind === "failed") {
+            // The model call failed for good; the prompt request would only
+            // return when it times out, so end the run with the real reason now.
+            if (settled) return;
+            settled = true;
+            sink({ kind: "error", code: "opencode_model_failed", message: event.message });
+            void backend.abort(sessionId).catch(() => {}).finally(() => {
+              stream.abort();
+              proc.kill("SIGTERM");
+            });
           } else if (event.kind === "ask") {
             if (pending.some((p) => p.ask.id === event.ask.id)) return;
             const questionId = randomUUID();
@@ -279,6 +289,7 @@ export class OpenCodeDriver implements AgentDriver {
         response = await backend.prompt(sessionId, EMPTY_REPLY_NUDGE);
         outcome = outcomeOf(response);
       }
+      if (settled) return; // already failed from the event stream
       settled = true;
       sink({
         kind: "result",
@@ -294,6 +305,7 @@ export class OpenCodeDriver implements AgentDriver {
       });
     })()
       .catch((err: unknown) => {
+        if (settled) return;
         settled = true;
         sink({ kind: "error", code: "opencode_chat_failed", message: String(err) });
       })

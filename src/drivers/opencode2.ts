@@ -26,6 +26,7 @@ import {
   type TurnReply,
   basicAuthHeader,
   isApproval,
+  retryFailure,
 } from "./opencodeCommon.js";
 import { apiFromSpecs } from "./opencodeVersion.js";
 
@@ -149,7 +150,7 @@ export function mapOpenCodeV2Event(
     case "session.status": {
       const type = rec(data.status).type;
       if (type === "idle") return status("WAITING_PEER");
-      return status("LLM_HEARTBEAT");
+      return retryFailure(data.status) ?? status("LLM_HEARTBEAT");
     }
     case "permission.asked":
       return { kind: "ask", ask: permissionAsk(data) };

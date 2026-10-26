@@ -20,7 +20,9 @@ import {
   type PendingAsk,
   type TurnReply,
   basicAuthHeader,
+  describeError,
   isApproval,
+  retryFailure,
 } from "./opencodeCommon.js";
 import { apiFromSpecs } from "./opencodeVersion.js";
 
@@ -116,6 +118,7 @@ export class OpenCodeV1Backend implements OpenCodeBackend {
       const mapped = mapOpenCodeEvent(event as OpenCodeEvent, sessionId);
       if (!mapped) continue;
       if (mapped.kind === "permission") onEvent({ kind: "ask", ask: permissionAsk(mapped.permission) });
+      else if (mapped.kind === "failed") onEvent(mapped);
       else onEvent({ kind: "driver", event: mapped.event });
     }
   }
@@ -143,6 +146,7 @@ function permissionAsk(permission: OpenCodePermission): PendingAsk {
 export type OpenCodeMappedEvent =
   | { kind: "driver"; event: DriverEvent }
   | { kind: "permission"; permission: OpenCodePermission }
+  | { kind: "failed"; message: string }
   | null;
 
 // A pure function (same behaviour as the stream loop in `events`, just
@@ -181,6 +185,20 @@ export function mapOpenCodeEvent(event: OpenCodeEvent, sessionId: string): OpenC
     case "session.idle": {
       if ((props?.sessionID as string | undefined) !== sessionId) return null;
       return { kind: "driver", event: { kind: "status", status: "WAITING_PEER" } };
+    }
+    // The model call failed (a usage limit, a bad key). The prompt request
+    // does not return when this happens, so this event is the only place
+    // the real reason shows up. An aborted message is our own Stop.
+    case "session.error": {
+      if ((props?.sessionID as string | undefined) !== sessionId) return null;
+      const error = props?.error as { name?: string } | undefined;
+      if (!error || error.name === "MessageAbortedError") return null;
+      return { kind: "failed", message: describeError(error) };
+    }
+    case "session.status": {
+      if ((props?.sessionID as string | undefined) !== sessionId) return null;
+      const failure = retryFailure(props?.status);
+      return failure?.kind === "failed" ? failure : null;
     }
     case "permission.asked": {
       const permission = props as unknown as OpenCodePermission;

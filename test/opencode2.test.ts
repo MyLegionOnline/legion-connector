@@ -62,6 +62,13 @@ test("a tool call followed by an answer maps to the expected status sequence", (
   assert.deepEqual(finished?.kind === "status" && finished.detail, { tool: "bash" });
 });
 
+test("provider retries end the run only once the retry cap is reached", () => {
+  const retry = (attempt: number) =>
+    mapAll(frames(["session.status", { sessionID: SID, status: { type: "retry", attempt, message: "Rate limited", next: 0 } }]));
+  assert.deepEqual(retry(1), [{ kind: "driver", event: { kind: "status", status: "LLM_HEARTBEAT" } }]);
+  assert.deepEqual(retry(3), [{ kind: "failed", message: "The model provider keeps failing (attempt 3): Rate limited" }]);
+});
+
 test("reasoning is reported once, as the finished text", () => {
   const events = driverEvents(
     mapAll(

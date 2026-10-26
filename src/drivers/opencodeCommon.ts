@@ -22,7 +22,43 @@ export type BackendEvent =
   | { kind: "driver"; event: DriverEvent }
   | { kind: "ask"; ask: PendingAsk }
   /** The question was answered or withdrawn elsewhere (local terminal, timeout). */
-  | { kind: "ask_resolved"; id: string };
+  | { kind: "ask_resolved"; id: string }
+  /** The model call failed for good (provider error, exhausted retries): end the run with this message. */
+  | { kind: "failed"; message: string };
+
+/**
+ * How many times OpenCode may retry the model provider before the run is
+ * failed. OpenCode keeps retrying an error it considers retryable (a usage
+ * limit, an overloaded provider) while the prompt request just waits, so
+ * without a cap the Hub only learned of it when that request timed out.
+ */
+export const MAX_PROVIDER_RETRIES = 3;
+
+/**
+ * A retry scheduled further out than this is not a hiccup: a free tier
+ * limit, for one, is retried when the limit resets, hours later.
+ */
+export const MAX_RETRY_WAIT_MS = 2 * 60_000;
+
+/**
+ * The `failed` event for a `session.status` retry: once {@link MAX_PROVIDER_RETRIES}
+ * is reached, or when the next attempt is more than {@link MAX_RETRY_WAIT_MS} away.
+ */
+export function retryFailure(status: unknown, now: number = Date.now()): BackendEvent | null {
+  if (!status || typeof status !== "object") return null;
+  const { type, attempt, message, next, action } = status as {
+    type?: string;
+    attempt?: number;
+    message?: string;
+    next?: number;
+    action?: { message?: string };
+  };
+  if (type !== "retry" || typeof attempt !== "number") return null;
+  const waitsTooLong = typeof next === "number" && next - now > MAX_RETRY_WAIT_MS;
+  if (attempt < MAX_PROVIDER_RETRIES && !waitsTooLong) return null;
+  const reason = [message, action?.message].filter(Boolean).join(" ") || "no details";
+  return { kind: "failed", message: `The model provider keeps failing (attempt ${attempt}): ${reason}` };
+}
 
 /** The finished turn, in the shape {@link outcomeOf} judges. Both APIs are normalised to it. */
 export interface TurnReply {

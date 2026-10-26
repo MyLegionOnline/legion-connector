@@ -51,3 +51,72 @@ test("events of another session are ignored", () => {
   ]);
   assert.deepEqual(events, []);
 });
+
+// A usage limit or a bad key surfaces as `session.error` (or as retries in
+// `session.status`) while the prompt request keeps waiting; the run must end
+// with that reason instead of a generic "fetch failed" minutes later.
+test("a provider error ends the run with its message", () => {
+  const mapped = mapOpenCodeEvent(
+    {
+      type: "session.error",
+      properties: {
+        sessionID: SESSION_ID,
+        error: { name: "APIError", data: { message: "Free usage limit reached.", isRetryable: false } },
+      },
+    },
+    SESSION_ID,
+  );
+  assert.deepEqual(mapped, { kind: "failed", message: "APIError: Free usage limit reached." });
+});
+
+test("our own abort and another session's error do not end the run", () => {
+  const aborted = mapOpenCodeEvent(
+    { type: "session.error", properties: { sessionID: SESSION_ID, error: { name: "MessageAbortedError", data: {} } } },
+    SESSION_ID,
+  );
+  const other = mapOpenCodeEvent(
+    { type: "session.error", properties: { sessionID: "other", error: { name: "APIError", data: { message: "x" } } } },
+    SESSION_ID,
+  );
+  assert.equal(aborted, null);
+  assert.equal(other, null);
+});
+
+test("provider retries end the run only once the retry cap is reached", () => {
+  const retry = (attempt: number) =>
+    mapOpenCodeEvent(
+      {
+        type: "session.status",
+        properties: { sessionID: SESSION_ID, status: { type: "retry", attempt, message: "Rate limited", next: 0 } },
+      },
+      SESSION_ID,
+    );
+  assert.equal(retry(1), null);
+  assert.equal(retry(2), null);
+  assert.deepEqual(retry(3), { kind: "failed", message: "The model provider keeps failing (attempt 3): Rate limited" });
+});
+
+// Seen live with OpenCode's free model: attempt 1, next attempt hours later
+// (when the free limit resets), with the reason in `action`.
+test("a retry scheduled far ahead ends the run on the first attempt", () => {
+  const mapped = mapOpenCodeEvent(
+    {
+      type: "session.status",
+      properties: {
+        sessionID: SESSION_ID,
+        status: {
+          type: "retry",
+          attempt: 1,
+          message: "Free usage exceeded, subscribe to Go",
+          action: { reason: "free_tier_limit", message: "Subscribe to OpenCode Go." },
+          next: Date.now() + 6 * 3600_000,
+        },
+      },
+    },
+    SESSION_ID,
+  );
+  assert.deepEqual(mapped, {
+    kind: "failed",
+    message: "The model provider keeps failing (attempt 1): Free usage exceeded, subscribe to Go Subscribe to OpenCode Go.",
+  });
+});
