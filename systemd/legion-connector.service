@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# install.sh fills in the real user/paths; this template assumes the
-# connector was installed under the invoking user's home directory.
+# install.sh fills in the dedicated user (legion-agent by default) and the
+# path of node; the connector keeps its state in that user's home.
 User=%i
 WorkingDirectory=/opt/legion-connector
 ExecStart=/usr/bin/node /opt/legion-connector/dist/index.js start

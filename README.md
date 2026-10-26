@@ -32,10 +32,25 @@ cd legion-connector
 ./install.sh <pairing-code> wss://your-hub.example.com/api/v1/connector/ws
 ```
 
-The script copies the package to `/opt/legion-connector`, builds it, writes a
-default `~/.legion-connector/connector.toml`, exchanges the pairing code for a
-refresh token, and installs a systemd unit so the connector survives reboots.
-The code is single-use and expires after 15 minutes.
+On Linux with systemd the script creates a dedicated system user for the
+connector, `legion-agent` with uid 59999 (`--user NAME` and `--uid N` change
+them; it refuses root and a uid that another account or running process
+already has). It copies the package to `/opt/legion-connector` (owned by
+root, so the agent cannot change its own connector), builds it, writes a
+default `~legion-agent/.legion-connector/connector.toml` with `work_dirs` set
+to `~legion-agent/work`, exchanges the pairing code for a refresh token as that
+user, and installs a systemd unit that runs as that user so the connector
+survives reboots. The code is single-use and expires after 15 minutes.
+
+Then sign OpenCode in to a model provider as the same user, since OpenCode
+keeps its credentials per user:
+
+```bash
+sudo -iu legion-agent opencode auth login
+```
+
+Without systemd (macOS, for example) the script sets the connector up for the
+current user; run it as a dedicated user yourself (see below).
 
 Manual steps (what `install.sh` automates):
 
@@ -67,9 +82,11 @@ someone with access to your Hub Room, and reduce the blast radius:
   inside Docker containers run under host uids too (often 1000), and a user
   that shares the uid can read their `/proc/<pid>/environ` (API keys, tokens)
   and send them signals. `useradd` hands out the first free uid from 1000 on,
-  so pick one explicitly, for example
-  `sudo useradd --system --uid 59999 --create-home legion-agent`, and check
-  with `ps -eo uid,comm | awk '$1==59999'` that nothing else runs under it.
+  so pick one explicitly. `install.sh` does this for you (`legion-agent`, uid
+  59999, checked against existing accounts and running processes); by hand it
+  is `sudo useradd --system --uid 59999 --create-home legion-agent`, then
+  check with `ps -eo uid,comm | awk '$1==59999'` that nothing else runs under
+  it.
 - Copy [`opencode.example.json`](./opencode.example.json) to
   `<work_dir>/opencode.json`. Its `permission.bash` rules make OpenCode ask
   before `rm`, `systemctl restart` and similar commands; each "ask" appears as
