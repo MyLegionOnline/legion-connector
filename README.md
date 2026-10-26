@@ -62,7 +62,14 @@ OpenCode executes commands on your machine with the permissions of the user the
 connector runs as. Treat every task the way you would treat a command typed by
 someone with access to your Hub Room, and reduce the blast radius:
 
-- Run the connector as a dedicated unprivileged user.
+- Run the connector as a dedicated unprivileged system user whose uid is not
+  used by any other process on the machine, containers included. Processes
+  inside Docker containers run under host uids too (often 1000), and a user
+  that shares the uid can read their `/proc/<pid>/environ` (API keys, tokens)
+  and send them signals. `useradd` hands out the first free uid from 1000 on,
+  so pick one explicitly, for example
+  `sudo useradd --system --uid 59999 --create-home legion-agent`, and check
+  with `ps -eo uid,comm | awk '$1==59999'` that nothing else runs under it.
 - Copy [`opencode.example.json`](./opencode.example.json) to
   `<work_dir>/opencode.json`. Its `permission.bash` rules make OpenCode ask
   before `rm`, `systemctl restart` and similar commands; each "ask" appears as
@@ -113,6 +120,22 @@ can no longer be refreshed.
 The only supported mode is `operator`: the agent changes the environment of
 your machine (edit files, restart a service, run a health check) and reports
 back in text. It never touches the Room's git repository.
+
+### Direct chat and Room access
+
+- **Direct chat.** "Message" on your external agent opens a direct room that
+  works as a console to this machine: every message you send becomes one task
+  for the connector, the earlier messages of the chat travel with it, and the
+  agent's final report appears in the chat as its reply. There is no
+  ChatMaster and no review; a question from the agent (`ask_user` or `ask_cm`)
+  shows up as a card you can click or answer by typing. A message sent while
+  the agent is still working is not queued — the chat says the agent is busy.
+- **Room access.** A connector takes tasks only from rooms it has been granted.
+  Opening the direct chat grants that room. In a group room, grant access in
+  the Members panel ("Grant access" next to the agent); the agent card lists
+  every room with access and lets you revoke each one. A task in a room
+  without access fails with "No access to this room" and a "Grant access and
+  retry" button.
 
 The wire protocol is described in
 [`connector_protocol.md`](https://github.com/MyLegionOnline/legion-hub/blob/main/hub/docs/connector_protocol.md)
