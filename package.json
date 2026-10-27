@@ -20,16 +20,16 @@
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "ws": "^8.18.0"
+    "ws": "^8.22.0"
   },
   "optionalDependencies": {
-    "@opencode-ai/sdk": "1.18.30"
+    "@opencode-ai/sdk": "1.19.4"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "@types/ws": "^8.5.13",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
+    "@types/node": "^26.6.5",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=18.17"
