@@ -366,3 +366,42 @@ test("a dispatch for a mode the connector does not run is refused and the driver
   client.close();
   hub.wss.close();
 });
+
+/** Starts slowly, like `opencode serve` on a small VPS, and records what happened. */
+class SlowStartDriver implements AgentDriver {
+  readonly name = "slow-start";
+  signal: AbortSignal | undefined;
+  stopped: string[] = [];
+  async start(_ctx: DispatchContext, _sink: DriverEventSink, signal?: AbortSignal): Promise<DriverRun> {
+    this.signal = signal;
+    await new Promise((r) => setTimeout(r, 300));
+    return { answer: async () => {}, stop: async (reason) => void this.stopped.push(reason) };
+  }
+}
+
+test("a stop that arrives while the driver is starting is not lost", async () => {
+  const driver = new SlowStartDriver();
+  const hub = startFakeHub();
+  const client = new ConnectorClient(fakeConfig(hub.port), fakeCredentials(), driver);
+  void client.connect();
+  const ws = await hub.socket;
+  await waitFor(hub.received, (f) => f.type === "hello");
+  const sessionId = randomUUID();
+  ws.send(
+    JSON.stringify({
+      type: "dispatch",
+      seq: 1,
+      run_id: randomUUID(),
+      session_id: sessionId,
+      payload: { task_id: randomUUID(), agent_id: randomUUID(), room_id: randomUUID(), mode: "operator", task_data_text: "x" },
+    }),
+  );
+  await new Promise((r) => setTimeout(r, 50));
+  ws.send(JSON.stringify({ type: "stop", seq: 2, session_id: sessionId, payload: { reason: "paused" } }));
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(driver.signal?.aborted, true);
+  assert.deepEqual(driver.stopped, ["paused"]);
+  assert.equal(hub.received.some((f) => f.type === "error"), false);
+  client.close();
+  hub.wss.close();
+});

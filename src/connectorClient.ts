@@ -39,6 +39,7 @@ export class ConnectorClient {
   private reconnectAttempt = 0;
   private lastAckedSeq: number | null = null;
   private readonly activeRuns = new Map<string, ActiveRun>(); // session_id -> run
+  private readonly startingRuns = new Map<string, AbortController>(); // session_id -> driver.start in progress
   private readonly lastSeqBySession = new Map<string, number>();
 
   constructor(
@@ -172,10 +173,15 @@ export class ConnectorClient {
       }
 
       case "stop": {
+        const reason = (frame.payload?.reason as string | undefined) ?? "stop requested";
         const run = frame.session_id ? this.activeRuns.get(frame.session_id) : undefined;
         if (run) {
-          const reason = (frame.payload?.reason as string | undefined) ?? "stop requested";
           await run.driverRun.stop(reason);
+        } else if (frame.session_id) {
+          // Frames are handled concurrently, so a stop can arrive while the
+          // driver is still starting. Dropping it left that agent running next
+          // to the one the Hub dispatched on resume.
+          this.startingRuns.get(frame.session_id)?.abort(reason);
         }
         break;
       }
@@ -271,8 +277,15 @@ export class ConnectorClient {
 
     const sink = (event: DriverEvent) => this.emitDriverEvent(sessionId, runId, event);
 
+    const starting = new AbortController();
+    this.startingRuns.set(sessionId, starting);
     try {
-      const driverRun = await this.driver.start(ctx, sink);
+      const driverRun = await this.driver.start(ctx, sink, starting.signal);
+      if (starting.signal.aborted) {
+        logger.info("connector: session stopped while starting", { task_id: ctx.task_id, session_id: sessionId });
+        await driverRun.stop(String(starting.signal.reason ?? "stop requested"));
+        return;
+      }
       this.activeRuns.set(sessionId, { run_id: runId, driverRun });
     } catch (err) {
       this.send({
@@ -281,6 +294,8 @@ export class ConnectorClient {
         session_id: sessionId,
         payload: { code: "driver_start_failed", message: String(err) },
       });
+    } finally {
+      this.startingRuns.delete(sessionId);
     }
   }
 

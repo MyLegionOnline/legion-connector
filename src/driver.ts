@@ -61,5 +61,10 @@ export interface DriverRun {
 
 export interface AgentDriver {
   readonly name: string;
-  start(ctx: DispatchContext, sink: DriverEventSink): Promise<DriverRun>;
+  /**
+   * `signal` fires when the Hub stops the session before `start` has returned
+   * (a pause seconds after dispatch). A driver should then give up and clean up
+   * what it started; the client stops whatever run it returns anyway.
+   */
+  start(ctx: DispatchContext, sink: DriverEventSink, signal?: AbortSignal): Promise<DriverRun>;
 }

@@ -115,10 +115,11 @@ export class OpenCodeDriver implements AgentDriver {
 
   constructor(private readonly options: OpenCodeDriverOptions = {}) {}
 
-  async start(ctx: DispatchContext, sink: DriverEventSink): Promise<DriverRun> {
+  async start(ctx: DispatchContext, sink: DriverEventSink, signal?: AbortSignal): Promise<DriverRun> {
     const command = this.options.command ?? "opencode";
 
     const detected = await detectOpenCode({ command, api: this.options.api });
+    if (signal?.aborted) return NOOP_RUN;
     if (!detected.ok) {
       // A missing binary is a different problem from an unsupported one.
       const code = detected.raw === null && this.options.api !== "v1" && this.options.api !== "v2"
@@ -176,6 +177,13 @@ export class OpenCodeDriver implements AgentDriver {
     }
 
     let settled = false;
+    // Stopped by the Hub before the run was handed back: the server goes away
+    // without an error, the Hub has already closed the session.
+    const onAbort = () => {
+      settled = true;
+      void terminateServer(proc);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     let spawnError: Error | null = null;
     // The server says why it quit (a database it cannot open, a taken port) on
     // stderr; the tail goes into the error instead of a bare exit code.
@@ -219,7 +227,8 @@ export class OpenCodeDriver implements AgentDriver {
     };
 
     try {
-      await waitForServer(baseUrl, api === "v2" ? "/openapi.json" : "/doc", headers, 15_000);
+      // 15 s was not enough on a 1 CPU / 2 GB VPS: the first log line alone came 4-7 s after spawn.
+      await waitForServer(baseUrl, api === "v2" ? "/openapi.json" : "/doc", headers, 30_000);
     } catch (err) {
       // spawnError (ENOENT etc.) is the more useful message when both fired.
       return abandon("opencode_start_failed", String(spawnError ?? err));
@@ -264,6 +273,8 @@ export class OpenCodeDriver implements AgentDriver {
           `installed opencode version (${api}): ${String(err)}`,
       );
     }
+    if (signal?.aborted) return NOOP_RUN; // onAbort is already stopping the server
+    signal?.removeEventListener("abort", onAbort);
 
     sink({ kind: "status", status: "LLM_REQUEST_SENT" });
 
