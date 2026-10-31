@@ -95,7 +95,7 @@ export class ConnectorClient {
           type: "hello",
           payload: {
             connector_id: this.credentials.connector_id,
-            version: "0.1.0",
+            version: "0.1.1",
             protocol_version: "2",
             capabilities: {
               agent_cli: this.config.agent_cli,

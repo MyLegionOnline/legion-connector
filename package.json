@@ -1,6 +1,6 @@
 {
   "name": "@legion-hub/connector",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Legion connector — runs your local OpenCode agent as a remote executor for a Legion Hub Room session.",
   "license": "Apache-2.0",
   "repository": {
