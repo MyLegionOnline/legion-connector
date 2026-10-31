@@ -23,7 +23,14 @@ import {
   basicAuthHeader,
   outcomeOf,
 } from "./opencodeCommon.js";
-import { type ApiResolution, SUPPORTED_V1_INSTALL, probeApi, readCliVersion, resolveApi } from "./opencodeVersion.js";
+import {
+  type ApiResolution,
+  type CliVersionFailure,
+  SUPPORTED_V1_INSTALL,
+  probeApi,
+  readCliVersionDetailed,
+  resolveApi,
+} from "./opencodeVersion.js";
 
 export interface OpenCodeDriverOptions {
   command?: string; // defaults to "opencode"
@@ -46,9 +53,37 @@ export interface OpenCodeDriverOptions {
 /** Which OpenCode is installed, and so which backend a task will use. */
 export async function detectOpenCode(
   options: Pick<OpenCodeDriverOptions, "command" | "api"> = {},
-): Promise<ApiResolution & { raw: string | null }> {
-  const raw = await readCliVersion(options.command ?? "opencode");
-  return { ...resolveApi(options.api, raw), raw };
+): Promise<ApiResolution & { raw: string | null; failure?: CliVersionFailure }> {
+  const { output: raw, failure } = await readCliVersionDetailed(options.command ?? "opencode");
+  return { ...resolveApi(options.api, raw), raw, failure };
+}
+
+/** The dispatch error for a `--version` that gave nothing, by its cause. */
+export function versionFailureMessage(command: string, failure: CliVersionFailure | undefined): string {
+  if (failure === "timeout") {
+    return `\`${command} --version\` did not answer in 10 s — the machine may be out of memory or CPU (check for leftover \`opencode serve\` processes)`;
+  }
+  if (failure === "failed") return `\`${command} --version\` failed — run it as the connector's user to see why`;
+  return `could not run \`${command} --version\` — is OpenCode installed and on the connector user's PATH?`;
+}
+
+/**
+ * Stop `opencode serve` for good. A server busy with a session (or starved of
+ * memory) can ignore SIGTERM; on a 2 GB VPS two such leftovers took all the
+ * memory, and the next task failed on a `--version` that timed out. So wait for
+ * the exit and send SIGKILL if it does not come. `proc.killed` only says a
+ * signal was sent, so the exit is read from exitCode/signalCode.
+ */
+export async function terminateServer(proc: ChildProcess, graceMs = 3000): Promise<void> {
+  const exited = () => proc.exitCode !== null || proc.signalCode !== null;
+  if (exited()) return;
+  const gone = new Promise<void>((resolve) => proc.once("exit", () => resolve()));
+  proc.kill("SIGTERM");
+  await Promise.race([gone, new Promise((resolve) => setTimeout(resolve, graceMs))]);
+  if (exited()) return;
+  logger.warn("opencode: serve ignored SIGTERM, killing it", { pid: proc.pid });
+  proc.kill("SIGKILL");
+  await Promise.race([gone, new Promise((resolve) => setTimeout(resolve, 1000))]);
 }
 
 async function waitForServer(baseUrl: string, probePath: string, headers: Record<string, string>, timeoutMs: number): Promise<void> {
@@ -89,7 +124,7 @@ export class OpenCodeDriver implements AgentDriver {
       const code = detected.raw === null && this.options.api !== "v1" && this.options.api !== "v2"
         ? "opencode_spawn_failed"
         : detected.code;
-      const message = code === "opencode_spawn_failed" ? `could not run \`${command} --version\` — is OpenCode installed?` : detected.message;
+      const message = code === "opencode_spawn_failed" ? versionFailureMessage(command, detected.failure) : detected.message;
       sink({ kind: "error", code, message });
       return NOOP_RUN;
     }
@@ -252,7 +287,7 @@ export class OpenCodeDriver implements AgentDriver {
             sink({ kind: "error", code: "opencode_model_failed", message: event.message });
             void backend.abort(sessionId).catch(() => {}).finally(() => {
               stream.abort();
-              proc.kill("SIGTERM");
+              void terminateServer(proc);
             });
           } else if (event.kind === "ask") {
             if (pending.some((p) => p.ask.id === event.ask.id)) return;
@@ -311,7 +346,7 @@ export class OpenCodeDriver implements AgentDriver {
       })
       .finally(() => {
         stream.abort();
-        proc.kill("SIGTERM");
+        void terminateServer(proc);
       });
 
     return {
@@ -336,9 +371,7 @@ export class OpenCodeDriver implements AgentDriver {
           // best-effort — the hard kill below is what guarantees the 5s bound
         }
         stream.abort();
-        proc.kill("SIGTERM");
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        if (!proc.killed) proc.kill("SIGKILL");
+        await terminateServer(proc);
       },
     };
   }

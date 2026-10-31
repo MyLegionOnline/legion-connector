@@ -105,12 +105,25 @@ export async function probeApi(baseUrl: string, headers: Record<string, string>)
   return apiFromSpecs(openapi, doc);
 }
 
+/** Why `--version` gave nothing: the command is missing, it failed, or it did not answer in time. */
+export type CliVersionFailure = "not_found" | "failed" | "timeout";
+
+export interface CliVersionRead {
+  output: string | null;
+  failure?: CliVersionFailure;
+}
+
 /** `<command> --version`, or null if it cannot be run or prints nothing. */
-export function readCliVersion(command: string, timeoutMs = 10_000): Promise<string | null> {
+export async function readCliVersion(command: string, timeoutMs = 10_000): Promise<string | null> {
+  return (await readCliVersionDetailed(command, timeoutMs)).output;
+}
+
+export function readCliVersionDetailed(command: string, timeoutMs = 10_000): Promise<CliVersionRead> {
   return new Promise((resolve) => {
     let out = "";
     let done = false;
-    const finish = (value: string | null) => {
+    let timedOut = false;
+    const finish = (value: CliVersionRead) => {
       if (done) return;
       done = true;
       resolve(value);
@@ -119,16 +132,28 @@ export function readCliVersion(command: string, timeoutMs = 10_000): Promise<str
       // On Windows an npm-installed `opencode` is a .cmd shim, which only a shell can run.
       const proc = spawn(command, ["--version"], {
         stdio: ["ignore", "pipe", "pipe"],
-        timeout: timeoutMs,
         shell: process.platform === "win32",
       });
+      // A starved machine can take longer than this; that is not a missing install.
+      const timer = setTimeout(() => {
+        timedOut = true;
+        proc.kill("SIGKILL");
+      }, timeoutMs);
       proc.stdout?.on("data", (c: Buffer) => (out += c.toString()));
       proc.stderr?.on("data", (c: Buffer) => (out += c.toString()));
-      proc.on("error", () => finish(null));
+      proc.on("error", (err: NodeJS.ErrnoException) => {
+        clearTimeout(timer);
+        finish({ output: null, failure: err.code === "ENOENT" ? "not_found" : "failed" });
+      });
       // A shell reports a missing command as text on stderr and a non-zero exit.
-      proc.on("close", (code) => finish(code === 0 ? out.trim() || null : null));
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        if (timedOut) return finish({ output: null, failure: "timeout" });
+        if (code === 0 && out.trim()) return finish({ output: out.trim() });
+        finish({ output: null, failure: code === 127 ? "not_found" : "failed" });
+      });
     } catch {
-      finish(null);
+      finish({ output: null, failure: "failed" });
     }
   });
 }
